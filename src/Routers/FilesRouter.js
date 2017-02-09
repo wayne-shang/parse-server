@@ -28,7 +28,7 @@ export class FilesRouter {
       Middlewares.allowCrossDomain,
       BodyParser.raw({type: () => { return true; }, limit: options.maxUploadSize || '20mb'}), // Allow uploads without Content-Type, or with any Content-Type.
       Middlewares.handleParseHeaders,
-      this.createHandler
+      this.wxcreateHandler
     );
 
     router.delete('/files/:filename',
@@ -96,7 +96,7 @@ export class FilesRouter {
 
 
     filesController.createFile(config, filename, mulitiParts[filename], 'multipart/form-data').then((result) => {
-      res.status(201);
+      res.status(200);
       res.set('Location', result.url);
       res.json(result);
     }).catch((e) => {
