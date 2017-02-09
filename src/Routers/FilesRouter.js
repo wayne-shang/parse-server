@@ -92,7 +92,7 @@ export class FilesRouter {
     const filesController = config.filesController;
 
     var mulitiParts = MultiPart_parse(req.body, contentType);
-    console.log('shang:wxcreateHandler:mulitiParts[filename]:' + mulitiParts[req.params.filename].length);
+    //console.log('shang:wxcreateHandler:mulitiParts[filename]:' + mulitiParts[req.params.filename].length);
 
 
     filesController.createFile(config, filename, mulitiParts[filename], 'multipart/form-data').then((result) => {
@@ -243,12 +243,12 @@ function handleFileStream(stream, req, res, contentType) {
 }
 
 function Header_parse(header) {
-    var headerFields = {};
-    var matchResult = header.match(/^.*name="([^"]*)"$/);
-    if ( matchResult ) {
-      headerFields.name = matchResult[1];
-    }
-    return headerFields;
+  var headerFields = {};
+  var matchResult = header.match(/^.*name="([^"]*)"$/);
+  if (matchResult) {
+    headerFields.name = matchResult[1];
+  }
+  return headerFields;
 }
 
 function rawStringToBuffer(str) {
@@ -273,7 +273,7 @@ function handleCodePoints(array) {
   }
   return result;
 }
-/* 
+/*
  * MultiPart_parse decodes a multipart/form-data encoded response into a named-part-map.
  * The response can be a string or raw bytes.
  *
@@ -281,7 +281,7 @@ function handleCodePoints(array) {
  *      var map = MultiPart_parse(xhr.responseText, xhr.getResponseHeader('Content-Type'));
  *
  * Usage for raw bytes:
- *      xhr.open(..);     
+ *      xhr.open(..);
  *      xhr.responseType = "arraybuffer";
  *      ...
  *      var map = MultiPart_parse(xhr.response, xhr.getResponseHeader('Content-Type'));
@@ -293,56 +293,56 @@ function handleCodePoints(array) {
  * Copyright@ 2013-2014 Wolfgang Kuehn, released under the MIT license.
 */
 function MultiPart_parse(body, contentType) {
-    // Examples for content types:
-    //      multipart/form-data; boundary="----7dd322351017c"; ...
-    //      multipart/form-data; boundary=----7dd322351017c; ...
-    var m = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+  // Examples for content types:
+  //      multipart/form-data; boundary="----7dd322351017c"; ...
+  //      multipart/form-data; boundary=----7dd322351017c; ...
+  var m = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
 
-    if ( !m ) {
-        throw new Error('Bad content-type header, no multipart boundary');
-    }
+  if (!m) {
+    throw new Error('Bad content-type header, no multipart boundary');
+  }
 
-    var boundary = m[1] || m[2];
+  var boundary = m[1] || m[2];
 
-    // \r\n is part of the boundary.
-    boundary = '\r\n--' + boundary;
+  // \r\n is part of the boundary.
+  boundary = '\r\n--' + boundary;
 
-    var isRaw = typeof(body) !== 'string';
+  var isRaw = typeof(body) !== 'string';
 
-    var s = null;
-    if ( isRaw ) {
-        //s = body.toString('utf-8');
-        var view = new Uint8Array(body);
-        s = handleCodePoints(view);
-    } else {
-        s = body;
-    }
-    //console.log('shang:MultiPart_parse:s:' + s);
-    // Prepend what has been stripped by the body parsing mechanism.
-    s = '\r\n' + s;
+  var s = null;
+  if (isRaw) {
+    //s = body.toString('utf-8');
+    var view = new Uint8Array(body);
+    s = handleCodePoints(view);
+  } else {
+    s = body;
+  }
+  //console.log('shang:MultiPart_parse:s:' + s);
+  // Prepend what has been stripped by the body parsing mechanism.
+  s = '\r\n' + s;
 
-    var parts = s.split(new RegExp(boundary)),
-        partsByName = {};
+  var parts = s.split(new RegExp(boundary)),
+    partsByName = {};
 
-    var fieldName = null;
-    // First part is a preamble, last part is closing '--'
-    for (var i=1; i<parts.length-1; i++) {
-      var subparts = parts[i].split('\r\n\r\n');
-      var headers = subparts[0].split('\r\n');
-      for (var j=1; j<headers.length; j++) {
-        var headerFields = Header_parse(headers[j]);
-        if ( headerFields.name ) {
-            fieldName = headerFields.name;
-        }
+  var fieldName = null;
+  // First part is a preamble, last part is closing '--'
+  for (var i = 1; i < parts.length - 1; i++) {
+    var subparts = parts[i].split('\r\n\r\n');
+    var headers = subparts[0].split('\r\n');
+    for (var j = 1; j < headers.length; j++) {
+      var headerFields = Header_parse(headers[j]);
+      if (headerFields.name) {
+        fieldName = headerFields.name;
       }
-      console.log('shang:MultiPart_parse:fieldName:' + JSON.stringify(fieldName));
-      console.log('shang:MultiPart_parse:headers:' + JSON.stringify(headers));
-      //console.log('shang:MultiPart_parse:subparts:' + JSON.stringify(subparts));
-      console.log('shang:MultiPart_parse:subparts[1]:' + subparts[1].length);
-      console.log('shang:MultiPart_parse:rawStringToBuffer(subparts[1]):' + rawStringToBuffer(subparts[1]).length);
-
-      partsByName[fieldName] = isRaw?rawStringToBuffer(subparts[1]):subparts[1];
     }
+    //console.log('shang:MultiPart_parse:fieldName:' + JSON.stringify(fieldName));
+    //console.log('shang:MultiPart_parse:headers:' + JSON.stringify(headers));
+    //console.log('shang:MultiPart_parse:subparts:' + JSON.stringify(subparts));
+    //console.log('shang:MultiPart_parse:subparts[1]:' + subparts[1].length);
+    //console.log('shang:MultiPart_parse:rawStringToBuffer(subparts[1]):' + rawStringToBuffer(subparts[1]).length);
 
-    return partsByName;
+    partsByName[fieldName] = isRaw ? rawStringToBuffer(subparts[1]) : subparts[1];
+  }
+
+  return partsByName;
 }
