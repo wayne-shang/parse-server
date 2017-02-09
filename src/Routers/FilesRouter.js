@@ -24,6 +24,13 @@ export class FilesRouter {
       this.createHandler
     );
 
+    router.post('/wxfiles/:filename',
+      Middlewares.allowCrossDomain,
+      BodyParser.raw({type: () => { return true; }, limit: options.maxUploadSize || '20mb'}), // Allow uploads without Content-Type, or with any Content-Type.
+      Middlewares.handleParseHeaders,
+      this.createHandler
+    );
+
     router.delete('/files/:filename',
       Middlewares.allowCrossDomain,
       Middlewares.handleParseHeaders,
@@ -58,6 +65,44 @@ export class FilesRouter {
         res.end('File not found.');
       });
     }
+  }
+
+  wxcreateHandler(req, res, next) {
+    if (!req.body || !req.body.length) {
+      next(new Parse.Error(Parse.Error.FILE_SAVE_ERROR,
+        'Invalid file upload.'));
+      return;
+    }
+
+    if (req.params.filename.length > 128) {
+      next(new Parse.Error(Parse.Error.INVALID_FILE_NAME,
+        'Filename too long.'));
+      return;
+    }
+
+    if (!req.params.filename.match(/^[_a-zA-Z0-9][a-zA-Z0-9@\.\ ~_-]*$/)) {
+      next(new Parse.Error(Parse.Error.INVALID_FILE_NAME,
+        'Filename contains invalid characters.'));
+      return;
+    }
+
+    const filename = req.params.filename;
+    const contentType = req.get('Content-type');
+    const config = req.config;
+    const filesController = config.filesController;
+
+    var mulitiParts = MultiPart_parse(req.body, contentType);
+    console.log('shang:wxcreateHandler:mulitiParts[filename]:' + mulitiParts[req.params.filename].length);
+
+
+    filesController.createFile(config, filename, mulitiParts[filename], 'multipart/form-data').then((result) => {
+      res.status(201);
+      res.set('Location', result.url);
+      res.json(result);
+    }).catch((e) => {
+      logger.error(e.message, e);
+      next(new Parse.Error(Parse.Error.FILE_SAVE_ERROR, 'Could not store file.'));
+    });
   }
 
   createHandler(req, res, next) {
@@ -195,4 +240,109 @@ function handleFileStream(stream, req, res, contentType) {
       }
     });
   });
+}
+
+function Header_parse(header) {
+    var headerFields = {};
+    var matchResult = header.match(/^.*name="([^"]*)"$/);
+    if ( matchResult ) {
+      headerFields.name = matchResult[1];
+    }
+    return headerFields;
+}
+
+function rawStringToBuffer(str) {
+  var idx, len = str.length,
+    arr = new Array(len);
+  for (idx = 0; idx < len; ++idx) {
+    arr[idx] = str.charCodeAt(idx) & 0xFF;
+  }
+  return new Buffer(arr);
+}
+
+function handleCodePoints(array) {
+  var CHUNK_SIZE = 0x8000; // arbitrary number here, not too small, not too big
+  var index = 0;
+  var length = array.length;
+  var result = '';
+  var slice;
+  while (index < length) {
+    slice = array.slice(index, Math.min(index + CHUNK_SIZE, length)); // `Math.min` is not really necessary here I think
+    result += String.fromCharCode.apply(null, slice);
+    index += CHUNK_SIZE;
+  }
+  return result;
+}
+/* 
+ * MultiPart_parse decodes a multipart/form-data encoded response into a named-part-map.
+ * The response can be a string or raw bytes.
+ *
+ * Usage for string response:
+ *      var map = MultiPart_parse(xhr.responseText, xhr.getResponseHeader('Content-Type'));
+ *
+ * Usage for raw bytes:
+ *      xhr.open(..);     
+ *      xhr.responseType = "arraybuffer";
+ *      ...
+ *      var map = MultiPart_parse(xhr.response, xhr.getResponseHeader('Content-Type'));
+ *
+ * TODO: Can we use https://github.com/felixge/node-formidable
+ * See http://stackoverflow.com/questions/6965107/converting-between-strings-and-arraybuffers
+ * See http://www.w3.org/Protocols/rfc1341/7_2_Multipart.html
+ *
+ * Copyright@ 2013-2014 Wolfgang Kuehn, released under the MIT license.
+*/
+function MultiPart_parse(body, contentType) {
+    // Examples for content types:
+    //      multipart/form-data; boundary="----7dd322351017c"; ...
+    //      multipart/form-data; boundary=----7dd322351017c; ...
+    var m = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
+
+    if ( !m ) {
+        throw new Error('Bad content-type header, no multipart boundary');
+    }
+
+    var boundary = m[1] || m[2];
+
+    // \r\n is part of the boundary.
+    boundary = '\r\n--' + boundary;
+
+    var isRaw = typeof(body) !== 'string';
+
+    var s = null;
+    if ( isRaw ) {
+        //s = body.toString('utf-8');
+        var view = new Uint8Array(body);
+        s = handleCodePoints(view);
+    } else {
+        s = body;
+    }
+    //console.log('shang:MultiPart_parse:s:' + s);
+    // Prepend what has been stripped by the body parsing mechanism.
+    s = '\r\n' + s;
+
+    var parts = s.split(new RegExp(boundary)),
+        partsByName = {};
+
+    var fieldName = null;
+    // First part is a preamble, last part is closing '--'
+    for (var i=1; i<parts.length-1; i++) {
+      var subparts = parts[i].split('\r\n\r\n');
+      var headers = subparts[0].split('\r\n');
+      for (var j=1; j<headers.length; j++) {
+        var headerFields = Header_parse(headers[j]);
+        if ( headerFields.name ) {
+            fieldName = headerFields.name;
+        }
+      }
+      console.log('shang:MultiPart_parse:fieldName:' + JSON.stringify(fieldName));
+      console.log('shang:MultiPart_parse:headers:' + JSON.stringify(headers));
+      //console.log('shang:MultiPart_parse:subparts:' + JSON.stringify(subparts));
+      console.log('shang:MultiPart_parse:subparts[1]:' + subparts[1].length);
+      console.log('shang:MultiPart_parse:rawStringToBuffer(subparts[1]):' + rawStringToBuffer(subparts[1]).length);
+
+      partsByName[fieldName] = isRaw?rawStringToBuffer(subparts[1]):subparts[1];
+    }
+
+    return partsByName;
 }
