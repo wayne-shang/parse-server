@@ -92,10 +92,15 @@ export class FilesRouter {
     const filesController = config.filesController;
 
     var mulitiParts = MultiPart_parse(req.body, contentType);
-    //console.log('shang:wxcreateHandler:mulitiParts[filename]:' + mulitiParts[req.params.filename].length);
+    //console.log('shang:wxcreateHandler:mulitiParts[filename]:' + mulitiParts[filename]);
 
-
-    filesController.createFile(config, filename, mulitiParts[filename], 'multipart/form-data').then((result) => {
+    // on WX real cell phone, sometimes file name is fixed as: 'wx-file.jpg'
+    var data = mulitiParts['wx-file.jpg'] || mulitiParts[filename];
+    if (!data) {
+      throw new Error('Bad multipart body parsing: no data file found!');
+    }
+    
+    filesController.createFile(config, filename, data, 'multipart/form-data').then((result) => {
       res.status(200);
       res.set('Location', result.url);
       res.json(result);
@@ -317,11 +322,13 @@ function MultiPart_parse(body, contentType) {
   } else {
     s = body;
   }
-  //console.log('shang:MultiPart_parse:s:' + s);
+  // console.log('shang:MultiPart_parse:s:' + s);
   // Prepend what has been stripped by the body parsing mechanism.
   s = '\r\n' + s;
 
-  var parts = s.split(new RegExp(boundary)),
+  // don't use RegExp here, since WX boundary someime with a '+' sign like this:'--WABoundary+D110BF680595D4AEWA'
+  // var parts = s.split(new RegExp(boundary)), 
+  var parts = s.split(boundary),
     partsByName = {};
 
   var fieldName = null;
